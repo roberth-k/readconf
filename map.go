@@ -61,6 +61,15 @@ func (m Map) Unmarshal(key string, v interface{}) (err error) {
 
 			vv.SetInt(iv)
 			return nil
+		case reflect.Bool:
+			var bv bool
+			bv, err = strconv.ParseBool(value)
+			if err != nil {
+				return err
+			}
+
+			vv.SetBool(bv)
+			return nil
 		default:
 			panic(fmt.Sprintf("reflection of kind %d not implemented", vt.Kind()))
 		}
