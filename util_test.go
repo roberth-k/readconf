@@ -1,4 +1,4 @@
-package configkit
+package readconf
 
 import (
 	"reflect"

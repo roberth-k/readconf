@@ -1,4 +1,4 @@
-module github.com/tetratom/configkit
+module github.com/tetratom/readconf
 
 go 1.13
 

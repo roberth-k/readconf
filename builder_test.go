@@ -1,15 +1,15 @@
-package configkit_test
+package readconf_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/tetratom/configkit"
+	"github.com/tetratom/readconf"
 )
 
-func b() *configkit.Builder {
-	return configkit.NewBuilder()
+func b() *readconf.Builder {
+	return readconf.NewBuilder()
 }
 
 func TestBuilder_ExpectStructPointer(t *testing.T) {
@@ -76,8 +76,8 @@ type EmbeddedWithInterfacedDefaults struct {
 	EmbeddedBar int
 }
 
-func (EmbeddedWithInterfacedDefaults) DefaultConfig() configkit.Map {
-	return configkit.Map{
+func (EmbeddedWithInterfacedDefaults) DefaultConfig() readconf.Map {
+	return readconf.Map{
 		`EMBEDDED_BAR`: `12`,
 	}
 }
@@ -87,8 +87,8 @@ type NestedWithInterfacedDefaults struct {
 	Bar int `default:"22"`
 }
 
-func (NestedWithInterfacedDefaults) DefaultConfig() configkit.Map {
-	return configkit.Map{
+func (NestedWithInterfacedDefaults) DefaultConfig() readconf.Map {
+	return readconf.Map{
 		`FOO`: `test21`,
 	}
 }
@@ -101,8 +101,8 @@ type configWithInterfacedDefaults struct {
 	ignore string // nolint shouldn't affect anything
 }
 
-func (configWithInterfacedDefaults) DefaultConfig() configkit.Map {
-	return configkit.Map{`BAR`: `2`}
+func (configWithInterfacedDefaults) DefaultConfig() readconf.Map {
+	return readconf.Map{`BAR`: `2`}
 }
 
 func TestBuilder_Build(t *testing.T) {
@@ -136,7 +136,7 @@ func TestBuilder_Build(t *testing.T) {
 		t.Run("embedded value not provided", func(t *testing.T) {
 			var conf configWithPartialDefaults
 			err := b().
-				MergeMap(configkit.Map{
+				MergeMap(readconf.Map{
 					`FOO`:         `bar`,
 					`NESTED__FOO`: `baf`,
 				}).
@@ -148,7 +148,7 @@ func TestBuilder_Build(t *testing.T) {
 		t.Run("nested value not provided", func(t *testing.T) {
 			var conf configWithPartialDefaults
 			err := b().
-				MergeMap(configkit.Map{
+				MergeMap(readconf.Map{
 					`FOO`:          `bar`,
 					`EMBEDDED_FOO`: `baf`,
 				}).
@@ -203,7 +203,7 @@ func TestBuilder_Build(t *testing.T) {
 func TestBuilder_MergeMap(t *testing.T) {
 	var conf configWithPartialDefaults
 	err := b().
-		MergeMap(configkit.Map{
+		MergeMap(readconf.Map{
 			`FOO`:          `foofoo`,
 			`BAR`:          `2`,
 			`EMBEDDED_BAR`: `99`,
