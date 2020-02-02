@@ -1,6 +1,7 @@
 package configkit
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -33,9 +34,9 @@ func TestNormalizeKey(t *testing.T) {
 	require.Equal(t, "MY_FIELD", normalizeKey("  my_Field "))
 }
 
-func TestExtractStructFields(t *testing.T) {
+func TestWalkStruct(t *testing.T) {
 	type Embedded struct {
-		Bar string
+		Bar int
 	}
 
 	var theStruct struct {
@@ -47,30 +48,21 @@ func TestExtractStructFields(t *testing.T) {
 		Embedded
 	}
 
-	t.Run("must be a pointer", func(t *testing.T) {
-		m, err := extractStructFields(theStruct)
-		require.Errorf(t, err, "expected pointer to struct")
-		require.Empty(t, m)
+	keys := []string{}
 
-		m, err = extractStructFields(&theStruct)
-		require.NoError(t, err)
-		require.NotEmpty(t, m)
-	})
+	err := walkStruct(
+		&theStruct,
+		func(path []string, f reflect.StructField, v reflect.Value) error {
+			if !v.CanSet() {
+				return nil
+			}
 
-	t.Run("field map of an empty struct", func(t *testing.T) {
-		var s struct{}
-		m, err := extractStructFields(&s)
-		require.NoError(t, err)
-		require.Empty(t, m.Keys())
-	})
-
-	t.Run("field map", func(t *testing.T) {
-		m, err := extractStructFields(&theStruct)
-		require.NoError(t, err)
-		require.Equal(t, []string{
-			`BAR`,
-			`INNER`,
-			`NESTED__FOO`,
-		}, m.Keys())
-	})
+			key := structKey(path)
+			keys = append(keys, key)
+			return nil
+		})
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		``, `INNER`, `NESTED`, `NESTED__FOO`, ``, `BAR`,
+	}, keys)
 }

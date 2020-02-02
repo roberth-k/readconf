@@ -4,9 +4,7 @@ import (
 	"encoding"
 	"fmt"
 	"reflect"
-	"sort"
 	"strconv"
-	"strings"
 )
 
 type Map map[string]string
@@ -32,12 +30,18 @@ func (m Map) Unmarshal(key string, v interface{}) (err error) {
 		err = wrapError(err, "configuration key \"%s\"", key)
 	}()
 
+	vt := reflect.TypeOf(v)
+	if vt.Kind() != reflect.Ptr {
+		return fmt.Errorf("expected pointer to value")
+	}
+
+	vv, vt := reflect.ValueOf(v).Elem(), vt.Elem()
+
 	value, ok := m.Lookup(key)
 	if !ok {
 		return fmt.Errorf("not found")
 	}
 
-	vv, vt := reflect.ValueOf(v), reflect.TypeOf(v)
 	switch {
 	case vt.Implements(_unmarshalerType):
 		return vv.Interface().(Unmarshaler).UnmarshalConfig(value)
@@ -66,82 +70,5 @@ func (m Map) Unmarshal(key string, v interface{}) (err error) {
 func (m Map) Merge(other Map) {
 	for k, v := range other {
 		m[k] = v
-	}
-}
-
-type structField struct {
-	field reflect.StructField
-	value reflect.Value
-}
-
-type fieldMap struct {
-	m   map[string]structField
-	sep string
-}
-
-func (m *fieldMap) init() {
-	if m.m == nil {
-		m.m = map[string]structField{}
-	}
-
-	if m.sep == "" {
-		m.sep = "__"
-	}
-}
-
-func (m *fieldMap) Len() int {
-	return len(m.m)
-}
-
-func (m *fieldMap) Range() map[string]structField {
-	out := make(map[string]structField, len(m.m))
-	for k, v := range m.m {
-		out[k] = v
-	}
-	return out
-}
-
-func (m *fieldMap) Keys() []string {
-	m.init()
-
-	out := make([]string, 0, len(m.m))
-	for k := range m.m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func (m *fieldMap) Lookup(key string) (structField, bool) {
-	m.init()
-
-	key = normalizeKey(key)
-	v, ok := m.m[key]
-	return v, ok
-}
-
-func (m *fieldMap) Set(path []string, f reflect.StructField, v reflect.Value) {
-	m.init()
-
-	if len(path) == 0 {
-		panic("empty path")
-	}
-
-	var key string
-	{
-		ss := make([]string, len(path))
-		for i := range path {
-			if path[i] == "" {
-				panic("empty key")
-			}
-			ss[i] = transformStructKey(path[i])
-		}
-		key = strings.Join(ss, m.sep)
-		key = normalizeKey(key)
-	}
-
-	m.m[key] = structField{
-		field: f,
-		value: v,
 	}
 }

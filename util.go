@@ -55,7 +55,7 @@ func copyAppend(in []string, ss ...string) []string {
 	return out
 }
 
-func checkIsPointerToStruct(v interface{}) error {
+func validateIsPointerToStruct(v interface{}) error {
 	switch {
 	case v == nil:
 		return fmt.Errorf("expected non-nil target")
@@ -66,42 +66,6 @@ func checkIsPointerToStruct(v interface{}) error {
 	default:
 		return nil
 	}
-}
-
-func extractStructFields(v interface{}) (*fieldMap, error) {
-	if err := checkIsPointerToStruct(v); err != nil {
-		return nil, err
-	}
-
-	out := &fieldMap{}
-
-	var walk func(vv reflect.Value, prefix []string)
-
-	walk = func(vv reflect.Value, prefix []string) {
-		vt := vv.Type()
-
-		for i := 0; i < vv.NumField(); i++ {
-			fv, ft := vv.Field(i), vt.Field(i)
-
-			switch {
-			case !fv.CanSet():
-				continue
-			case fv.Kind() == reflect.Struct:
-				path := prefix
-				if !ft.Anonymous {
-					path = copyAppend(path, ft.Name)
-				}
-
-				walk(fv, path)
-			default:
-				path := copyAppend(prefix, ft.Name)
-				out.Set(path, ft, fv)
-			}
-		}
-	}
-
-	walk(reflect.ValueOf(v).Elem(), nil)
-	return out, nil
 }
 
 func resolveValueMap(m Map) error {
@@ -150,4 +114,86 @@ func resolveValueMap(m Map) error {
 	}
 
 	return nil
+}
+
+func walkStruct(
+	x interface{},
+	walker func(path []string, f reflect.StructField, v reflect.Value) error,
+) error {
+	xv := reflect.ValueOf(x)
+	if xv.Type().Kind() == reflect.Ptr {
+		xv = xv.Elem()
+	}
+
+	if xv.Kind() != reflect.Struct {
+		return fmt.Errorf("expected struct")
+	}
+
+	var walk func(vv reflect.Value, f reflect.StructField, prefix []string) error
+
+	walk = func(vv reflect.Value, f reflect.StructField, prefix []string) error {
+		vt := vv.Type()
+
+		for i := 0; i < vt.NumField(); i++ {
+			fv, ft := vv.Field(i), vt.Field(i)
+
+			path := prefix
+			if !ft.Anonymous {
+				path = copyAppend(path, ft.Name)
+			}
+
+			if err := walker(path, ft, fv); err != nil {
+				return err
+			}
+
+			if ft.Type.Kind() == reflect.Struct {
+				if err := walk(fv, ft, path); err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	}
+
+	wrapper := reflect.StructField{
+		Name:      "",
+		PkgPath:   "",
+		Type:      xv.Type(),
+		Tag:       "",
+		Offset:    0,
+		Index:     nil,
+		Anonymous: false,
+	}
+
+	if err := walker([]string{}, wrapper, xv); err != nil {
+		return err
+	}
+
+	return walk(xv, wrapper, nil)
+}
+
+func canAssignConfig(v reflect.Value) bool {
+	t := v.Type()
+
+	switch {
+	case t.Implements(_unmarshalerType):
+		return true
+	case t.Kind() != reflect.Struct:
+		return true
+	default:
+		return false
+	}
+}
+
+func structKey(path []string) string {
+	ss := make([]string, len(path))
+	for i := range path {
+		ss[i] = transformStructKey(path[i])
+	}
+
+	key := strings.Join(ss, "__")
+	key = normalizeKey(key)
+
+	return key
 }
