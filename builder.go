@@ -135,7 +135,7 @@ func (b *Builder) Build(target interface{}) error {
 			keys := make([]string, 0, len(errs))
 
 			for _, err := range errs {
-				key := strings.ReplaceAll(err.StructNamespace(), `.`, `__`)
+				key := stringReplaceAll(err.StructNamespace(), `.`, `__`)
 				key = normalizeKey(key)
 				keys = append(keys, key)
 			}

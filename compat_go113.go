@@ -4,6 +4,7 @@ package readconf
 
 import (
 	"fmt"
+	"strings"
 )
 
 func wrapError(err error, msg string, args ...interface{}) error {
@@ -13,4 +14,8 @@ func wrapError(err error, msg string, args ...interface{}) error {
 
 	args = append(args, err)
 	return fmt.Errorf(msg+": %w", args...)
+}
+
+func stringReplaceAll(s, old, new string) string {
+	return strings.ReplaceAll(s, old, new)
 }
