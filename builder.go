@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -131,6 +131,20 @@ func (b *Builder) Build(target interface{}) error {
 	}
 
 	if err := b.Validator().Struct(target); err != nil {
+		if errs, ok := err.(validator.ValidationErrors); ok {
+			keys := make([]string, 0, len(errs))
+
+			for _, err := range errs {
+				key := strings.ReplaceAll(err.StructNamespace(), `.`, `__`)
+				key = normalizeKey(key)
+				keys = append(keys, key)
+			}
+
+			sort.Strings(keys)
+
+			return fmt.Errorf(`validation failed: %s`, strings.Join(keys, `, `))
+		}
+
 		return err
 	}
 
@@ -165,7 +179,7 @@ func (b *Builder) MergeData(data []byte) *Builder {
 	lines := bytes.Split(data, []byte("\n"))
 	m := make(Map, len(lines))
 
-	for _, line := range lines {
+	for i, line := range lines {
 		line := bytes.TrimSpace(line)
 
 		switch {
@@ -176,25 +190,28 @@ func (b *Builder) MergeData(data []byte) *Builder {
 		}
 
 		kvp := bytes.SplitN(line, []byte("="), 2)
-		switch {
-		case len(kvp[0]) == 0:
-			continue
-		case len(kvp) == 1:
-			kvp = append(kvp, []byte(""))
+
+		key := string(bytes.TrimSpace(kvp[0]))
+		if len(key) == 0 {
+			b.err = fmt.Errorf(`invalid empty key on line %d`, i+1)
+			return b
 		}
 
-		m[string(kvp[0])] = string(kvp[1])
+		if len(kvp) == 1 {
+			m[key] = ``
+		} else {
+			m[key] = string(bytes.TrimSpace(kvp[1]))
+		}
 	}
 
 	return b.MergeMap(m)
 }
 
-func (b *Builder) MergeEnviron(prefix string) *Builder {
+func (b *Builder) MergeEnviron(prefix string, env []string) *Builder {
 	if b.hasError() {
 		return b
 	}
 
-	env := os.Environ()
 	m := make(Map)
 
 	for _, x := range env {

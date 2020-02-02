@@ -8,36 +8,6 @@ import (
 	"github.com/tetratom/configkit"
 )
 
-type Embedded struct {
-	Bax string
-	Baf int
-}
-
-func (Embedded) DefaultConfig() configkit.Map {
-	return configkit.Map{"BAF": "3"}
-}
-
-type Nested struct {
-	Foo string `validate:"required"`
-	Bar int
-	Bax string
-}
-
-func (Nested) DefaultConfig() configkit.Map {
-	return configkit.Map{"FOO": "bar"}
-}
-
-type Config struct {
-	Foo string `default:"xyzz"`
-	Bar int
-	Embedded
-	Nested Nested
-}
-
-func (Config) DefaultConfig() configkit.Map {
-	return configkit.Map{"BAR": "10"}
-}
-
 func b() *configkit.Builder {
 	return configkit.NewBuilder()
 }
@@ -135,7 +105,7 @@ func (configWithInterfacedDefaults) DefaultConfig() configkit.Map {
 	return configkit.Map{`BAR`: `2`}
 }
 
-func TestBuilder_Defaults(t *testing.T) {
+func TestBuilder_Build(t *testing.T) {
 	t.Run("all defaults provided", func(t *testing.T) {
 		var conf configWithAllDefaults
 		err := b().Build(&conf)
@@ -206,74 +176,109 @@ func TestBuilder_Defaults(t *testing.T) {
 			ignore: "",
 		}, conf)
 	})
-}
 
-func TestBuilder(t *testing.T) {
-	t.Run("smoke test", func(t *testing.T) {
-		t.Run("initial values", func(t *testing.T) {
-			var conf Config
-			err := configkit.
-				NewBuilder().
-				Build(&conf)
+	t.Run("validation", func(t *testing.T) {
+		t.Run("success", func(t *testing.T) {
+			var conf struct {
+				Foo string `default:"aaa" validate:"min=2"`
+			}
 
-			t.Log(conf)
+			err := b().Build(&conf)
 			require.NoError(t, err)
-			require.Equal(t, 3, conf.Embedded.Baf)
-			require.Equal(t, "bar", conf.Nested.Foo)
-			require.Equal(t, 10, conf.Bar)
-			require.Equal(t, "xyzz", conf.Foo)
+			require.Equal(t, `aaa`, conf.Foo)
 		})
 
-		t.Run("merge map", func(t *testing.T) {
-			var conf Config
-			err := configkit.
-				NewBuilder().
-				MergeMap(configkit.Map{
-					"FOO":         "foofoo",
-					"NESTED__BAR": "5",
-					"BAF":         "99",
-				}).
-				Build(&conf)
+		t.Run("failure", func(t *testing.T) {
+			var conf struct {
+				Foo string `default:"a" validate:"min=2"`
+				Bar string `default:"a" validate:"min=2"`
+			}
 
-			t.Log(conf)
-			require.NoError(t, err)
-			require.Equal(t, 99, conf.Embedded.Baf)
-			require.Equal(t, "bar", conf.Nested.Foo)
-			require.Equal(t, 5, conf.Nested.Bar)
-			require.Equal(t, "", conf.Nested.Bax)
-			require.Equal(t, 10, conf.Bar)
-			require.Equal(t, "foofoo", conf.Foo)
-		})
-
-		t.Run("merge data", func(t *testing.T) {
-			var conf Config
-			err := configkit.
-				NewBuilder().
-				MergeData([]byte(`
-					NESTED__BAX=blah
-					NESTED__FOO=${NESTED__BAX}
-					FOO=${NESTED__FOO}
-				`)).
-				Build(&conf)
-
-			t.Log(conf)
-			require.NoError(t, err)
-			require.Equal(t, "blah", conf.Nested.Bax)
-			require.Equal(t, "blah", conf.Nested.Foo)
-			require.Equal(t, "blah", conf.Foo)
-		})
-
-		t.Run("merge file", func(t *testing.T) {
-			var conf Config
-			err := configkit.
-				NewBuilder().
-				MergeFile("testdata/config.env").
-				Build(&conf)
-
-			t.Log(conf)
-			require.NoError(t, err)
-			require.Equal(t, "foo from file", conf.Foo)
-			require.Equal(t, 1, conf.Nested.Bar)
+			err := b().Build(&conf)
+			require.Errorf(t, err, "validation failed: BAR, FOO")
 		})
 	})
+}
+
+func TestBuilder_MergeMap(t *testing.T) {
+	var conf configWithPartialDefaults
+	err := b().
+		MergeMap(configkit.Map{
+			`FOO`:          `foofoo`,
+			`BAR`:          `2`,
+			`EMBEDDED_BAR`: `99`,
+			`NESTED__FOO`:  `nested_foo`,
+		}).
+		Build(&conf)
+	require.NoError(t, err)
+	require.Equal(t, configWithPartialDefaults{
+		Foo: "foofoo",
+		Bar: 2,
+		EmbeddedWithPartialDefaults: EmbeddedWithPartialDefaults{
+			EmbeddedFoo: "test11",
+			EmbeddedBar: 99,
+		},
+		Nested: NestedWithPartialDefaults{
+			Foo: "nested_foo",
+			Bar: 22,
+		},
+		ignore: "",
+	}, conf)
+}
+
+func TestBuilder_MergeData(t *testing.T) {
+	var conf configWithPartialDefaults
+	err := b().
+		MergeData([]byte(`
+			FOO = foofoo
+
+			BAR = 2
+			# comment
+			EMBEDDED_BAR = ${BAR}9
+			NESTED__FOO = nested_${FOO}_foo
+		`)).
+		Build(&conf)
+
+	require.NoError(t, err)
+	require.Equal(t, configWithPartialDefaults{
+		Foo: "foofoo",
+		Bar: 2,
+		EmbeddedWithPartialDefaults: EmbeddedWithPartialDefaults{
+			EmbeddedFoo: "test11",
+			EmbeddedBar: 29,
+		},
+		Nested: NestedWithPartialDefaults{
+			Foo: "nested_foofoo_foo",
+			Bar: 22,
+		},
+		ignore: "",
+	}, conf)
+}
+
+func TestBuilder_MergeEnviron(t *testing.T) {
+	var conf configWithPartialDefaults
+	err := b().
+		MergeEnviron(`APP__`, []string{
+			`FOO=foo1`,
+			`APP__FOO=foo2`,
+			`APP__BAR=2`,
+			`APP__EMBEDDED_BAR=${BAR}9`,
+			`APP__NESTED__FOO=nested_${FOO}_foo`,
+		}).
+		Build(&conf)
+
+	require.NoError(t, err)
+	require.Equal(t, configWithPartialDefaults{
+		Foo: "foo2",
+		Bar: 2,
+		EmbeddedWithPartialDefaults: EmbeddedWithPartialDefaults{
+			EmbeddedFoo: "test11",
+			EmbeddedBar: 29,
+		},
+		Nested: NestedWithPartialDefaults{
+			Foo: "nested_foo2_foo",
+			Bar: 22,
+		},
+		ignore: "",
+	}, conf)
 }
