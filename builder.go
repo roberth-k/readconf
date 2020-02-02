@@ -78,16 +78,17 @@ func (b *Builder) Build(target interface{}) error {
 			}
 
 			if v.Type().Implements(_defaultConfigType) {
-				m1 := v.Interface().(DefaultConfig).DefaultConfig()
-				m2 := make(Map, len(m1))
-				for k, v := range m1 {
-					if key != "" {
-						k = key + "__" + k
+				if m1 := v.Interface().(DefaultConfig).DefaultConfig(); m1 != nil {
+					m2 := make(Map, len(m1))
+					for k, v := range m1 {
+						if key != "" {
+							k = key + "__" + k
+						}
+						m2[k] = v
 					}
-					m2[k] = v
-				}
 
-				values.Merge(m2)
+					values.Merge(m2)
+				}
 			}
 
 			return nil
