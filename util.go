@@ -55,32 +55,53 @@ func copyAppend(in []string, ss ...string) []string {
 	return out
 }
 
-func extractStructFields(v interface{}) fieldMap {
-	out := fieldMap{}
+func checkIsPointerToStruct(v interface{}) error {
+	switch {
+	case v == nil:
+		return fmt.Errorf("expected non-nil target")
+	case reflect.TypeOf(v).Kind() != reflect.Ptr:
+		return fmt.Errorf("expected a pointer")
+	case reflect.TypeOf(v).Elem().Kind() != reflect.Struct:
+		return fmt.Errorf("expected pointer to struct")
+	default:
+		return nil
+	}
+}
 
-	var walk func(vv reflect.Value, path []string)
+func extractStructFields(v interface{}) (*fieldMap, error) {
+	if err := checkIsPointerToStruct(v); err != nil {
+		return nil, err
+	}
 
-	walk = func(vv reflect.Value, path []string) {
+	out := &fieldMap{}
+
+	var walk func(vv reflect.Value, prefix []string)
+
+	walk = func(vv reflect.Value, prefix []string) {
 		vt := vv.Type()
 
 		for i := 0; i < vv.NumField(); i++ {
 			fv, ft := vv.Field(i), vt.Field(i)
 
-			if fv.Kind() == reflect.Struct {
-				path := path
+			switch {
+			case !fv.CanSet():
+				continue
+			case fv.Kind() == reflect.Struct:
+				path := prefix
 				if !ft.Anonymous {
 					path = copyAppend(path, ft.Name)
 				}
 
 				walk(fv, path)
+			default:
+				path := copyAppend(prefix, ft.Name)
+				out.Set(path, ft, fv)
 			}
-
-			out.Set(path, ft, fv)
 		}
 	}
 
 	walk(reflect.ValueOf(v).Elem(), nil)
-	return out
+	return out, nil
 }
 
 func resolveValueMap(m Map) error {

@@ -4,6 +4,7 @@ import (
 	"encoding"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -73,20 +74,73 @@ type structField struct {
 	value reflect.Value
 }
 
-type fieldMap map[string]structField
+type fieldMap struct {
+	m   map[string]structField
+	sep string
+}
 
-func (m fieldMap) Set(path []string, f reflect.StructField, v reflect.Value) {
+func (m *fieldMap) init() {
+	if m.m == nil {
+		m.m = map[string]structField{}
+	}
+
+	if m.sep == "" {
+		m.sep = "__"
+	}
+}
+
+func (m *fieldMap) Len() int {
+	return len(m.m)
+}
+
+func (m *fieldMap) Range() map[string]structField {
+	out := make(map[string]structField, len(m.m))
+	for k, v := range m.m {
+		out[k] = v
+	}
+	return out
+}
+
+func (m *fieldMap) Keys() []string {
+	m.init()
+
+	out := make([]string, 0, len(m.m))
+	for k := range m.m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (m *fieldMap) Lookup(key string) (structField, bool) {
+	m.init()
+
+	key = normalizeKey(key)
+	v, ok := m.m[key]
+	return v, ok
+}
+
+func (m *fieldMap) Set(path []string, f reflect.StructField, v reflect.Value) {
+	m.init()
+
+	if len(path) == 0 {
+		panic("empty path")
+	}
+
 	var key string
 	{
 		ss := make([]string, len(path))
 		for i := range path {
+			if path[i] == "" {
+				panic("empty key")
+			}
 			ss[i] = transformStructKey(path[i])
 		}
-		key = strings.Join(ss, "__")
+		key = strings.Join(ss, m.sep)
 		key = normalizeKey(key)
 	}
 
-	m[key] = structField{
+	m.m[key] = structField{
 		field: f,
 		value: v,
 	}
