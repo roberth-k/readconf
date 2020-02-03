@@ -233,7 +233,7 @@ func structKey(path []string) string {
 		ss[i] = transformStructKey(path[i])
 	}
 
-	key := strings.Join(ss, "__")
+	key := strings.Join(ss, _separator)
 	key = normalizeKey(key)
 
 	return key

@@ -68,8 +68,12 @@ func (b *Builder) Build(target interface{}) error {
 				return false, nil
 			}
 
-			if tag, ok := f.Tag.Lookup("config"); ok && tag == "-" {
-				return false, nil
+			if tag, ok := f.Tag.Lookup(_configTag); ok && tag != `` {
+				if tag == `-` {
+					return false, nil
+				}
+
+				path = append(path[:len(path)-1], normalizeKey(tag))
 			}
 
 			key := structKey(path)
@@ -77,7 +81,7 @@ func (b *Builder) Build(target interface{}) error {
 			if canUnmarshalDirectly(v) {
 				knownFields[key] = v
 
-				if tag, ok := f.Tag.Lookup("default"); ok {
+				if tag, ok := f.Tag.Lookup(_defaultTag); ok {
 					values.Set(key, tag)
 				}
 			}
@@ -96,8 +100,15 @@ func (b *Builder) Build(target interface{}) error {
 				return false, nil
 			}
 
-			if tag, ok := f.Tag.Lookup("config"); ok && tag == "-" {
-				return false, nil
+			if tag, ok := f.Tag.Lookup(_configTag); ok && tag != `` {
+				if tag == `-` {
+					return false, nil
+				}
+
+				path1 := make([]string, len(path))
+				copy(path1, path)
+				path1[len(path1)-1] = normalizeKey(tag)
+				path = path1
 			}
 
 			key := structKey(path)
@@ -107,7 +118,7 @@ func (b *Builder) Build(target interface{}) error {
 					m2 := make(Map, len(m1))
 					for k, v := range m1 {
 						if key != "" {
-							k = key + "__" + k
+							k = key + _separator + k
 						}
 						m2[k] = v
 					}
@@ -169,7 +180,7 @@ func (b *Builder) Build(target interface{}) error {
 					key = ns[0]
 				}
 
-				key = stringReplaceAll(key, `.`, `__`)
+				key = stringReplaceAll(key, `.`, _separator)
 				key = normalizeKey(key)
 				keys = append(keys, key)
 			}

@@ -235,6 +235,43 @@ func TestBuilder_Build(t *testing.T) {
 			require.EqualError(t, err, "validation failed: BAR, FOO")
 		})
 	})
+
+	t.Run("name override", func(t *testing.T) {
+		t.Run("no override", func(t *testing.T) {
+			var conf struct {
+				Foo    string `default:"aaa"`
+				Bar    string `default:"bbb" config:"BAAAR"`
+				Nested struct {
+					Bax string `default:"ccc" config:"BAAAX"`
+				}
+			}
+
+			err := b().Build(&conf)
+			require.NoError(t, err)
+			require.Equal(t, `aaa`, conf.Foo)
+			require.Equal(t, `bbb`, conf.Bar)
+			require.Equal(t, `ccc`, conf.Nested.Bax)
+		})
+
+		t.Run("override", func(t *testing.T) {
+			var conf struct {
+				Foo    string `default:"aaa"`
+				Bar    string `default:"bbb" config:"BAAAR"`
+				Nested struct {
+					Bax string `default:"ccc" config:"BAAAX"`
+				}
+			}
+
+			err := b().
+				Set(`BAAAR`, `bah`).
+				Set(`NESTED__BAAAX`, `bax`).
+				Build(&conf)
+			require.NoError(t, err)
+			require.Equal(t, `aaa`, conf.Foo)
+			require.Equal(t, `bah`, conf.Bar)
+			require.Equal(t, `bax`, conf.Nested.Bax)
+		})
+	})
 }
 
 func TestBuilder_MergeMap(t *testing.T) {
