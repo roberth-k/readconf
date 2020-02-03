@@ -356,3 +356,14 @@ func TestBuilder_MergeEnviron(t *testing.T) {
 		ignore: "",
 	}, conf)
 }
+
+func TestBuilder_MultipleRefs(t *testing.T) {
+	var conf struct {
+		Bax string `default:"bax"`
+		Baf string `default:"${BAX}_${BAX}"`
+	}
+
+	err := readconf.NewBuilder().Build(&conf)
+	require.NoError(t, err)
+	require.Equal(t, `bax_bax`, conf.Baf)
+}

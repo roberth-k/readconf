@@ -17,15 +17,20 @@ var (
 func parseReferences(v string) (refs []string, defaults map[string]string) {
 	ss := _reference.FindAllStringSubmatch(v, -1)
 
-	refs = make([]string, len(ss))
+	refSet := make(map[string]struct{}, len(ss))
 	defaults = make(map[string]string, len(ss))
 
 	for i := range ss {
 		sss := strings.SplitN(ss[i][1], ":-", 2)
-		refs[i] = sss[0]
+		refSet[sss[0]] = struct{}{}
 		if len(sss) == 2 {
 			defaults[sss[0]] = sss[1]
 		}
+	}
+
+	refs = make([]string, 0, len(refSet))
+	for k := range refSet {
+		refs = append(refs, k)
 	}
 
 	return
