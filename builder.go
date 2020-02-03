@@ -60,26 +60,47 @@ func (b *Builder) Build(target interface{}) error {
 	values := Map{}
 	knownFields := map[string]reflect.Value{}
 
-	err := walkStruct(
+	// walk fields
+	if err := walkStruct(
 		target,
-		func(path []string, f reflect.StructField, v reflect.Value) error {
+		func(path []string, f reflect.StructField, v reflect.Value) (bool, error) {
 			if !v.CanSet() {
-				return nil
+				return false, nil
 			}
 
 			if tag, ok := f.Tag.Lookup("config"); ok && tag == "-" {
-				return nil
+				return false, nil
 			}
 
 			key := structKey(path)
 
-			if canAssignConfig(v) {
+			if canUnmarshalDirectly(v) {
 				knownFields[key] = v
+
+				if tag, ok := f.Tag.Lookup("default"); ok {
+					values.Set(key, tag)
+				}
 			}
 
-			if tag, ok := f.Tag.Lookup("default"); ok {
-				values.Set(key, tag)
+			return true, nil
+		},
+	); err != nil {
+		return err
+	}
+
+	// walk structs
+	if err := walkStruct(
+		target,
+		func(path []string, f reflect.StructField, v reflect.Value) (bool, error) {
+			if !v.CanSet() {
+				return false, nil
 			}
+
+			if tag, ok := f.Tag.Lookup("config"); ok && tag == "-" {
+				return false, nil
+			}
+
+			key := structKey(path)
 
 			if v.Type().Implements(_defaultConfigType) {
 				if m1 := v.Interface().(DefaultConfig).DefaultConfig(); m1 != nil {
@@ -95,10 +116,9 @@ func (b *Builder) Build(target interface{}) error {
 				}
 			}
 
-			return nil
-		})
-
-	if err != nil {
+			return true, nil
+		},
+	); err != nil {
 		return err
 	}
 

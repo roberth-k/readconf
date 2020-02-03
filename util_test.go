@@ -67,14 +67,14 @@ func TestWalkStruct(t *testing.T) {
 
 	err := walkStruct(
 		&theStruct,
-		func(path []string, f reflect.StructField, v reflect.Value) error {
+		func(path []string, f reflect.StructField, v reflect.Value) (bool, error) {
 			if !v.CanSet() {
-				return nil
+				return false, nil
 			}
 
 			key := structKey(path)
 			keys = append(keys, key)
-			return nil
+			return true, nil
 		})
 	require.NoError(t, err)
 	require.Equal(t, []string{

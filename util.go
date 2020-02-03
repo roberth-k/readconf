@@ -153,7 +153,7 @@ func resolveValueMap(m Map) error {
 
 func walkStruct(
 	x interface{},
-	walker func(path []string, f reflect.StructField, v reflect.Value) error,
+	walker func(path []string, f reflect.StructField, v reflect.Value) (bool, error),
 ) error {
 	xv := reflect.ValueOf(x)
 	if xv.Type().Kind() == reflect.Ptr {
@@ -177,8 +177,10 @@ func walkStruct(
 				path = copyAppend(path, ft.Name)
 			}
 
-			if err := walker(path, ft, fv); err != nil {
+			if ok, err := walker(path, ft, fv); err != nil {
 				return err
+			} else if !ok {
+				continue
 			}
 
 			if ft.Type.Kind() == reflect.Struct {
@@ -201,23 +203,27 @@ func walkStruct(
 		Anonymous: false,
 	}
 
-	if err := walker([]string{}, wrapper, xv); err != nil {
+	if ok, err := walker([]string{}, wrapper, xv); err != nil {
 		return err
+	} else if !ok {
+		return nil
 	}
 
 	return walk(xv, wrapper, nil)
 }
 
-func canAssignConfig(v reflect.Value) bool {
+// Returns true when the given value is something we can
+// unmarshal config into.
+func canUnmarshalDirectly(v reflect.Value) bool {
 	t := v.Type()
 
 	switch {
 	case t.Implements(_unmarshalerType):
 		return true
-	case t.Kind() != reflect.Struct:
-		return true
-	default:
+	case t.Kind() == reflect.Struct:
 		return false
+	default:
+		return true
 	}
 }
 

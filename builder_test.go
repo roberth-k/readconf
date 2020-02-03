@@ -105,6 +105,28 @@ func (configWithInterfacedDefaults) DefaultConfig() readconf.Map {
 	return readconf.Map{`BAR`: `2`}
 }
 
+type nestedWithDefaultOverride struct {
+	Foo string
+	Bar int `default:"1"`
+}
+
+func (nestedWithDefaultOverride) DefaultConfig() readconf.Map {
+	return readconf.Map{`FOO`: `nested_foo`}
+}
+
+type configWithDefaultOverride struct {
+	Foo    string `default:"foo"`
+	Bar    int
+	Nested nestedWithDefaultOverride
+}
+
+func (configWithDefaultOverride) DefaultConfig() readconf.Map {
+	return readconf.Map{
+		`FOO`: `outer_foo`,
+		`BAR`: `2`,
+	}
+}
+
 func TestBuilder_Build(t *testing.T) {
 	t.Run("all defaults provided", func(t *testing.T) {
 		var conf configWithAllDefaults
@@ -174,6 +196,20 @@ func TestBuilder_Build(t *testing.T) {
 				Bar: 22,
 			},
 			ignore: "",
+		}, conf)
+	})
+
+	t.Run(`mixed defaults`, func(t *testing.T) {
+		var conf configWithDefaultOverride
+		err := b().Build(&conf)
+		require.NoError(t, err)
+		require.Equal(t, configWithDefaultOverride{
+			Foo: "outer_foo",
+			Bar: 2,
+			Nested: nestedWithDefaultOverride{
+				Foo: "nested_foo",
+				Bar: 1,
+			},
 		}, conf)
 	})
 
