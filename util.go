@@ -4,27 +4,38 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 )
 
 var (
 	_capital1  = regexp.MustCompile(`[A-Z][a-z]+`)
 	_capital2  = regexp.MustCompile(`[A-Z][A-Z]+`)
-	_reference = regexp.MustCompile(`\$\{([^}]+)\}`)
+	_reference = regexp.MustCompile(`\$\{([^}]+)(?:\:-[^}]*)?\}`)
 )
 
-func parseReferences(v string) []string {
+func parseReferences(v string) (refs []string, defaults map[string]string) {
 	ss := _reference.FindAllStringSubmatch(v, -1)
-	out := make([]string, len(ss))
+
+	refs = make([]string, len(ss))
+	defaults = make(map[string]string, len(ss))
+
 	for i := range ss {
-		out[i] = ss[i][1]
+		sss := strings.SplitN(ss[i][1], ":-", 2)
+		refs[i] = sss[0]
+		if len(sss) == 2 {
+			defaults[sss[0]] = sss[1]
+		}
 	}
-	return out
+
+	return
 }
 
+// ignores defaults
 func replaceReferences(s string, data Map) string {
 	return _reference.ReplaceAllStringFunc(s, func(s string) string {
-		v, ok := data[s[2:len(s)-1]]
+		ss := strings.SplitN(s[2:len(s)-1], ":-", 2)
+		v, ok := data[ss[0]]
 		if !ok {
 			return s
 		}
@@ -68,48 +79,72 @@ func validateIsPointerToStruct(v interface{}) error {
 	}
 }
 
+// Resolves references among values in the given Map. A reference is a substring
+// of the form ${other_var} or ${other_var:-default}. To "resolve" is to replace
+// references with their values from the given map.
+//
+// A value in the map is available to be used for resolution if it no longer
+// contains any references itself.
 func resolveValueMap(m Map) error {
-	for oneMorePass, lastRefMapLen := true, 0; oneMorePass; {
-		oneMorePass = false
+	var resolve func(key string, cycle []string) (bool, error)
 
-		// collect all values without references: these
-		// are eligible to be used as reference values.
-		refMap := Map{}
-		unrefs := []string{}
-		for k, v := range m {
-			if len(parseReferences(v)) == 0 {
-				refMap[k] = v
-			} else {
-				unrefs = append(unrefs, k)
+	resolve = func(key string, cycle []string) (bool, error) {
+		for _, ref := range cycle {
+			if ref == key {
+				return false, fmt.Errorf(
+					`cyclic reference: %s, %s`,
+					key, strings.Join(cycle, `, `))
 			}
 		}
 
-		if len(refMap) == lastRefMapLen {
-			return fmt.Errorf(
-				"suspected cyclic reference between: %s",
-				strings.Join(unrefs, ", "))
+		cycle = append([]string{key}, cycle...)
+
+		value, ok := m[key]
+		if !ok {
+			return false, nil
 		}
 
-		lastRefMapLen = len(refMap)
+		valueRefs, valueDefs := parseReferences(value)
+		resolved := make(Map, len(valueRefs))
 
-		for k, v := range m {
-			refs := parseReferences(v)
-
-			for _, ref := range refs {
-				if ref == k {
-					return fmt.Errorf("cyclic reference in %s", k)
+		for _, ref := range valueRefs {
+			ok, err := resolve(ref, cycle)
+			switch {
+			case err != nil:
+				return false, err
+			case !ok:
+				v, ok := valueDefs[ref]
+				if !ok {
+					return false, fmt.Errorf(`key %s referenced by %s not found`, ref, key)
 				}
 
-				if _, ok := refMap[ref]; !ok {
-					oneMorePass = true
-					goto nextValue
-				}
+				resolved[ref] = v
+			default:
+				resolved[ref] = m[ref]
 			}
+		}
 
-			// reaching this means all references can be resolved
-			m[k] = replaceReferences(v, refMap)
+		if len(resolved) != len(valueRefs) {
+			panic(`expected to have resolved all references in ` + key)
+		}
 
-		nextValue:
+		m[key] = replaceReferences(m[key], resolved)
+		return true, nil
+	}
+
+	sortedKeys := make([]string, 0, len(m))
+	for k := range m {
+		sortedKeys = append(sortedKeys, k)
+	}
+	sort.Strings(sortedKeys)
+
+	for _, k := range sortedKeys {
+		ok, err := resolve(k, nil)
+		switch {
+		case err != nil:
+			return err
+		case !ok:
+			panic(`unexpected !ok for ` + k)
 		}
 	}
 

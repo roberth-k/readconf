@@ -67,6 +67,10 @@ func (b *Builder) Build(target interface{}) error {
 				return nil
 			}
 
+			if tag, ok := f.Tag.Lookup("config"); ok && tag == "-" {
+				return nil
+			}
+
 			key := structKey(path)
 
 			if canAssignConfig(v) {

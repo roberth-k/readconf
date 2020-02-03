@@ -8,15 +8,30 @@ import (
 )
 
 func TestParseReferences(t *testing.T) {
-	require.ElementsMatch(t, []string{}, parseReferences("foo"))
-	require.ElementsMatch(t, []string{"foo"}, parseReferences("${foo}"))
-	require.ElementsMatch(t, []string{"foo", "bar"}, parseReferences("this-${foo}-and-${bar}-x"))
+	tests := []struct {
+		in   string
+		refs []string
+		defs map[string]string
+	}{
+		{`foo`, []string{}, map[string]string{}},
+		{`${foo}`, []string{`foo`}, map[string]string{}},
+		{`this-${foo}-and-${bar}-x`, []string{`foo`, `bar`}, map[string]string{}},
+		{`${foo}-${bar:-default}`, []string{`foo`, `bar`}, map[string]string{`bar`: `default`}},
+	}
+
+	for _, test := range tests {
+		refs, defs := parseReferences(test.in)
+		require.ElementsMatch(t, test.refs, refs)
+		require.Equal(t, test.defs, defs)
+	}
 }
 
 func TestReplaceReferences(t *testing.T) {
-	require.Equal(t, "this-xyz-and-${bar}-xyz-x", replaceReferences(
-		"this-${foo}-and-${bar}-${foo}-x",
-		Map{"foo": "xyz"}))
+	require.Equal(t,
+		"this-xyz-and-${bar}-xyz-x",
+		replaceReferences(
+			"this-${foo}-and-${bar}-${foo}-x",
+			Map{"foo": "xyz"}))
 }
 
 func TestTransformStructKey(t *testing.T) {
@@ -65,4 +80,58 @@ func TestWalkStruct(t *testing.T) {
 	require.Equal(t, []string{
 		``, `INNER`, `NESTED`, `NESTED__FOO`, ``, `BAR`,
 	}, keys)
+}
+
+func TestResolveValueMap(t *testing.T) {
+	t.Run("normal", func(t *testing.T) {
+		m := Map{
+			`FOO`: `BAR`,
+			`BAR`: `1-800-${FOO}`,
+			`BAZ`: `MY-${BAR}`,
+			`BAF`: `MY-${BAX:-123}`,
+			`BAT`: `MY-${BAF}`,
+			`BAM`: `MY-${BAF:-000}`,
+		}
+
+		err := resolveValueMap(m)
+
+		require.NoError(t, err)
+		require.Equal(t, Map{
+			`FOO`: `BAR`,
+			`BAR`: `1-800-BAR`,
+			`BAZ`: `MY-1-800-BAR`,
+			`BAF`: `MY-123`,
+			`BAT`: `MY-MY-123`,
+			`BAM`: `MY-MY-123`,
+		}, m)
+	})
+
+	t.Run("missing", func(t *testing.T) {
+		m := Map{
+			`BAR`: `${BAF}`,
+		}
+
+		err := resolveValueMap(m)
+		require.EqualError(t, err, `key BAF referenced by BAR not found`)
+	})
+
+	t.Run("simple cyclic reference", func(t *testing.T) {
+		m := Map{
+			`BAR`: `${BAR}`,
+		}
+
+		err := resolveValueMap(m)
+		require.EqualError(t, err, `cyclic reference: BAR, BAR`)
+	})
+
+	t.Run("long cyclic reference", func(t *testing.T) {
+		m := Map{
+			`BAR`: `${BAX}`,
+			`BAX`: `${BAR}`,
+		}
+
+		err := resolveValueMap(m)
+
+		require.EqualError(t, err, `cyclic reference: BAR, BAX, BAR`)
+	})
 }

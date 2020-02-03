@@ -18,3 +18,5 @@ var (
 	_unmarshalerType     = reflect.TypeOf(new(Unmarshaler)).Elem()
 	_textUnmarshalerType = reflect.TypeOf(new(encoding.TextUnmarshaler)).Elem()
 )
+
+type InspectorStage int
