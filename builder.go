@@ -131,6 +131,7 @@ func (b *Builder) Build(target interface{}) error {
 				missingKeys = append(missingKeys, key)
 			}
 		}
+		sort.Strings(missingKeys)
 
 		if len(missingKeys) > 0 {
 			plural := ""
@@ -160,7 +161,15 @@ func (b *Builder) Build(target interface{}) error {
 			keys := make([]string, 0, len(errs))
 
 			for _, err := range errs {
-				key := stringReplaceAll(err.StructNamespace(), `.`, `__`)
+				var key string
+
+				if ns := strings.SplitN(err.StructNamespace(), ".", 2); len(ns) == 2 {
+					key = ns[1]
+				} else {
+					key = ns[0]
+				}
+
+				key = stringReplaceAll(key, `.`, `__`)
 				key = normalizeKey(key)
 				keys = append(keys, key)
 			}

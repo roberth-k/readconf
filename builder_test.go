@@ -127,6 +127,11 @@ func (configWithDefaultOverride) DefaultConfig() readconf.Map {
 	}
 }
 
+type validationFailureConf struct {
+	Foo string `default:"a" validate:"min=2"`
+	Bar string `default:"a" validate:"min=2"`
+}
+
 func TestBuilder_Build(t *testing.T) {
 	t.Run("all defaults provided", func(t *testing.T) {
 		var conf configWithAllDefaults
@@ -151,7 +156,7 @@ func TestBuilder_Build(t *testing.T) {
 		t.Run("root level value not provided", func(t *testing.T) {
 			var conf configWithPartialDefaults
 			err := b().Build(&conf)
-			require.Errorf(t, err, "missing configuration key: FOO")
+			require.EqualError(t, err, `missing 3 configuration keys: EMBEDDED_BAR, FOO, NESTED__FOO`)
 			require.Empty(t, conf)
 		})
 
@@ -163,7 +168,7 @@ func TestBuilder_Build(t *testing.T) {
 					`NESTED__FOO`: `baf`,
 				}).
 				Build(&conf)
-			require.Errorf(t, err, "missing configuration key: EMBEDDED_FOO")
+			require.EqualError(t, err, "missing 1 configuration key: EMBEDDED_BAR")
 			require.Empty(t, conf)
 		})
 
@@ -172,10 +177,10 @@ func TestBuilder_Build(t *testing.T) {
 			err := b().
 				MergeMap(readconf.Map{
 					`FOO`:          `bar`,
-					`EMBEDDED_FOO`: `baf`,
+					`EMBEDDED_BAR`: `1`,
 				}).
 				Build(&conf)
-			require.Errorf(t, err, "missing configuration key: NESTED__FOO")
+			require.EqualError(t, err, "missing 1 configuration key: NESTED__FOO")
 			require.Empty(t, conf)
 		})
 	})
@@ -225,13 +230,9 @@ func TestBuilder_Build(t *testing.T) {
 		})
 
 		t.Run("failure", func(t *testing.T) {
-			var conf struct {
-				Foo string `default:"a" validate:"min=2"`
-				Bar string `default:"a" validate:"min=2"`
-			}
-
+			var conf validationFailureConf
 			err := b().Build(&conf)
-			require.Errorf(t, err, "validation failed: BAR, FOO")
+			require.EqualError(t, err, "validation failed: BAR, FOO")
 		})
 	})
 }
